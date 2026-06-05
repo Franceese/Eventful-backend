@@ -1,9 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 
 @Injectable()
 export class EventsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+
+    @Inject(CACHE_MANAGER)
+    private cacheManager: Cache,
+  ) {}
 
   async createEvent(user: any, body: any) {
     if (user.role !== 'CREATOR') {
@@ -12,23 +19,69 @@ export class EventsService {
 
     return this.prisma.event.create({
       data: {
-        title: body.title,
-        description: body.description,
-        venue: body.venue,
-        eventDate: new Date(body.eventDate),
-        ticketPrice: body.ticketPrice,
-        creatorId: user.userId,
-      },
+  title: body.title,
+  description: body.description,
+  venue: body.venue,
+  eventDate: new Date(body.eventDate),
+  ticketPrice: body.ticketPrice,
+  category: body.category,
+  capacity: body.capacity,
+  creatorId: user.userId,
+},
     });
   }
 
-  async findAll() {
-    return this.prisma.event.findMany({
+  async findAll(query: any) {
+  const { search, venue, category } = query;
+
+  // Use cache only when no filters are applied
+  if (!search && !venue && !category) {
+    const cachedEvents =
+      await this.cacheManager.get(
+        'all-events',
+      );
+
+    if (cachedEvents) {
+      return cachedEvents;
+    }
+  }
+
+  const events =
+    await this.prisma.event.findMany({
+      where: {
+        ...(search && {
+          title: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        }),
+
+        ...(venue && {
+          venue: {
+            contains: venue,
+            mode: 'insensitive',
+          },
+        }),
+
+        ...(category && {
+  category,
+}),
+      },
+
       orderBy: {
         createdAt: 'desc',
       },
     });
+
+  if (!search && !venue && !category) {
+    await this.cacheManager.set(
+      'all-events',
+      events,
+    );
   }
+
+  return events;
+}
 
   async findMine(user: any) {
     return this.prisma.event.findMany({
@@ -103,6 +156,31 @@ export class EventsService {
       ticketsSold,
       attendeesScanned,
       revenue,
+    };
+  }
+
+  async getShareLinks(eventId: string) {
+    const event = await this.prisma.event.findUnique({
+      where: {
+        id: eventId,
+      },
+    });
+
+    if (!event) {
+      throw new Error('Event not found');
+    }
+
+    const encodedTitle = encodeURIComponent(
+      event.title,
+    );
+
+    return {
+      event: event.title,
+      shareLinks: {
+        twitter: `https://twitter.com/intent/tweet?text=Join%20${encodedTitle}`,
+        facebook: `https://www.facebook.com/sharer/sharer.php?u=http://localhost:3000/events/${event.id}`,
+        whatsapp: `https://wa.me/?text=Join%20${encodedTitle}`,
+      },
     };
   }
 }

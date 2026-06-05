@@ -10,7 +10,10 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtGuard } from './guards/jwt.guard';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
+@ApiTags('auth')
+@ApiBearerAuth()
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
@@ -32,6 +35,9 @@ export class AuthController {
     );
   }
 
+  @ApiBearerAuth()
+@Get('profile')
+@UseGuards(JwtGuard)
   @Get('profile')
   @UseGuards(JwtGuard)
   getProfile(@Req() req: any) {

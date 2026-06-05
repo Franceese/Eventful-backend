@@ -12,6 +12,16 @@ enum Role {
   EVENTEE
 }
 
+enum Category {
+  TECH
+  MUSIC
+  AGRICULTURE
+  BUSINESS
+  SPORTS
+  EDUCATION
+  FOOD
+}
+
 model User {
   id        String   @id @default(uuid())
   fullName  String
@@ -20,8 +30,10 @@ model User {
   role      Role     @default(EVENTEE)
   createdAt DateTime @default(now())
 
-  events Event[]
-  tickets Ticket[]
+  payments  Payment[]
+  events    Event[]
+  tickets   Ticket[]
+  reminders Reminder[]
 }
 
 model Event {
@@ -31,27 +43,61 @@ model Event {
   venue       String
   eventDate   DateTime
   ticketPrice Float
+  category    Category
+
+  capacity Int
 
   creatorId String
-  creator   User @relation(fields: [creatorId], references: [id])
+  creator   User   @relation(fields: [creatorId], references: [id])
 
-  tickets Ticket[]
+  payments  Payment[]
+  tickets   Ticket[]
+  reminders Reminder[]
 
   createdAt DateTime @default(now())
 }
 
 model Ticket {
-  id        String   @id @default(uuid())
+  id String @id @default(uuid())
 
-  userId    String
-  user      User @relation(fields: [userId], references: [id])
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 
-  eventId   String
-  event     Event @relation(fields: [eventId], references: [id])
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id])
 
-  qrCode    String?
+  qrCode String?
 
   isScanned Boolean @default(false)
+
+  createdAt DateTime @default(now())
+}
+
+model Payment {
+  id        String   @id @default(uuid())
+  amount    Float
+  status    String
+  reference String   @unique
+  userId    String
+  eventId   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id])
+  event Event @relation(fields: [eventId], references: [id])
+}
+
+model Reminder {
+  id String @id @default(uuid())
+
+  remindAt DateTime
+
+  isSent Boolean @default(false)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id])
 
   createdAt DateTime @default(now())
 }
