@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ScheduleModule } from '@nestjs/schedule';
+import { RootController } from './root.controller';
 
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -35,5 +36,7 @@ import { RemindersModule } from './reminders/reminders.module';
     PaymentsModule,
     RemindersModule,
   ],
+
+  controllers: [RootController], // 👈 ADD THIS
 })
 export class AppModule {}
