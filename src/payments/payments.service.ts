@@ -54,68 +54,39 @@ export class PaymentsService {
   }
 
   async verifyPayment(reference: string) {
-    const payment = await this.prisma.payment.findUnique({
-      where: {
-        reference,
-      },
-      include: {
-        event: true,
-      },
-    });
-
-    if (!payment) {
-      throw new Error('Payment not found');
-    }
-
-    const response = await axios.get(
-      `https://api.paystack.co/transaction/verify/${reference}`,
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
-        },
-      },
-    );
-
-    const paystackStatus =
-      response.data.data.status;
-
-    if (paystackStatus !== 'success') {
-      return {
-        message: 'Payment not completed',
-        status: paystackStatus,
-      };
-    }
-
-    const existingTicket =
-      await this.prisma.ticket.findFirst({
-        where: {
-          userId: payment.userId,
-          eventId: payment.eventId,
-        },
-      });
-
-      const ticketsSold =
-  await this.prisma.ticket.count({
+  const payment = await this.prisma.payment.findUnique({
     where: {
-      eventId: payment.eventId,
+      reference,
+    },
+    include: {
+      event: true,
     },
   });
 
-if (
-  ticketsSold >= payment.event.capacity
-) {
-  throw new Error(
-    'Event is sold out',
+  if (!payment) {
+    throw new Error('Payment not found');
+  }
+
+  const response = await axios.get(
+    `https://api.paystack.co/transaction/verify/${reference}`,
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+      },
+    },
   );
-}
 
-    if (existingTicket) {
-      return {
-        message: 'Ticket already exists',
-        ticket: existingTicket,
-      };
-    }
+  const paystackStatus = response.data.data.status;
 
+  if (paystackStatus !== 'success') {
+    return {
+      message: 'Payment not completed',
+      status: paystackStatus,
+    };
+  }
+
+  // Always update payment status once Paystack confirms success
+  if (payment.status !== 'SUCCESS') {
     await this.prisma.payment.update({
       where: {
         id: payment.id,
@@ -124,24 +95,51 @@ if (
         status: 'SUCCESS',
       },
     });
+  }
 
-    const qrCode = await QRCode.toDataURL(
-      `${payment.userId}:${payment.eventId}:${reference}`,
-    );
+  const existingTicket = await this.prisma.ticket.findFirst({
+    where: {
+      userId: payment.userId,
+      eventId: payment.eventId,
+    },
+  });
 
-    const ticket = await this.prisma.ticket.create({
-      data: {
-        userId: payment.userId,
-        eventId: payment.eventId,
-        qrCode,
-      },
-    });
+  const ticketsSold = await this.prisma.ticket.count({
+    where: {
+      eventId: payment.eventId,
+    },
+  });
 
+  if (ticketsSold >= payment.event.capacity && !existingTicket) {
+    throw new Error('Event is sold out');
+  }
+
+  // Prevent duplicate ticket creation
+  if (existingTicket) {
     return {
-      message: 'Payment verified successfully',
-      ticket,
+      message: 'Payment already verified',
+      alreadyProcessed: true,
+      ticket: existingTicket,
     };
   }
+
+  const qrCode = await QRCode.toDataURL(
+    `${payment.userId}:${payment.eventId}:${reference}`,
+  );
+
+  const ticket = await this.prisma.ticket.create({
+    data: {
+      userId: payment.userId,
+      eventId: payment.eventId,
+      qrCode,
+    },
+  });
+
+  return {
+    message: 'Payment verified successfully',
+    ticket,
+  };
+}
 
   async getCreatorPayments(user: any) {
   const payments = await this.prisma.payment.findMany({
